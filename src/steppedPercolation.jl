@@ -14,6 +14,7 @@ function penningStartGrid(L, penningFrac)
     shuffle!(grid)
     return grid
 end
+export penningStartGrid
 
 # Dissipates the grid in-place
 function dissipateGrid!(grid, γ)

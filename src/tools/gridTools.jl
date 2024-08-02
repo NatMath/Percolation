@@ -1,22 +1,25 @@
 # Counts the number of direct neighbours of each cells are the target value and that match predicate
-function countNeighbours(grid, target, predicate = x -> true) # for 2D grid
-    neighbours = fill!(similar(grid), 0.)
-    neighbours[begin:end-1, :] .+= (grid[begin+1:end, :] .== target)
-    neighbours[begin+1:end, :] .+= (grid[begin:end-1, :] .== target)
-    neighbours[:, begin:end-1] .+= (grid[:, begin+1:end] .== target)
-    neighbours[:, begin+1:end] .+= (grid[:, begin:end-1] .== target)
-    neighbours[findall(x -> !predicate(x), grid)] .= 0.
+# Multi-dimensional and more performant than previous due to views instead of slices
+function countNeighbours(grid, target, predicate = Returns(true))
+    neighbours = zeros(Int8, size(grid))
+    dims = ndims(grid)
+    for d in 1:dims
+        b = firstindex(grid, d) #Gives access to begin/end indexing outside of brackets
+        e = lastindex(grid, d)
+        selectdim(neighbours, d, b:(e-1)) .+= (selectdim(grid, d, (b+1):e) .== target)
+        selectdim(neighbours, d, (b+1):e) .+= (selectdim(grid, d, b:(e-1)) .== target)
+    end
+    neighbours[findall(!predicate, grid)] .= 0
     return neighbours
 end
 export countNeighbours
 
-
 # Returns 1D list of indices
 # Returns all the cell indices where there are neighbours of type target, and the position value matches predicate
-findNeighboured(grid, target, predicate = x -> true) = findall(x -> x>0, countNeighbours(grid, target, predicate))
+findNeighboured(grid, target, predicate = Returns(true)) = findall(x -> x>0, countNeighbours(grid, target, predicate))
 export findNeighboured
 
-function spatialCorrelation(grid, cutoffDist = size(grid, 1) - 1)
+function spatialCorrelation(grid::Matrix, cutoffDist = size(grid, 1) - 1)
     offsets = [(x,y) for x in 0:cutoffDist, y in 0:cutoffDist if x^2+y^2 <= cutoffDist^2]
     # Set of vectors which contain the behaviour as function of d. Indexed by distance^2+1.
     # For example, offset (3,4) gives index 3^2+4^2+1 = 26. Offset (5,0) also gives index 26, because they are at the same distance
@@ -44,16 +47,15 @@ function spatialCorrelation(grid, cutoffDist = size(grid, 1) - 1)
 end
 export spatialCorrelation
 
-function findClusters2D(grid::Matrix{Bool}, ::NormalBoundary)
+function findClusters(grid::Matrix{Bool}, ::NormalBoundary)
     # Based on the naive Hoshen-Kopelman algorithm
-    #https://www.ocf.berkeley.edu/~fricke/projects/hoshenkopelman/hoshenkopelman.html
+    # https://www.ocf.berkeley.edu/~fricke/projects/hoshenkopelman/hoshenkopelman.html
 
     # Expects a grid of booleans values, with true being occupied
     # Doesn't need to be square
 
     L = size(grid, 1)
     N = prod(size(grid))
-
     labels = collect(1:N)
 
     for i = 1:size(grid, 2), j = 1:size(grid, 1)
@@ -75,10 +77,9 @@ function findClusters2D(grid::Matrix{Bool}, ::NormalBoundary)
     return reshape([find!(labels, x) for x in 1:N], size(grid))
 end
 
-function findClusters2D(grid::Matrix{Bool}, ::PeriodicBoundary)
+function findClusters(grid::Matrix{Bool}, ::PeriodicBoundary)
     L = size(grid, 1)
     N = prod(size(grid))
-
     labels = collect(1:N)
 
     for i = 1:size(grid, 2), j = 1:size(grid, 1)
@@ -107,7 +108,7 @@ function findClusters2D(grid::Matrix{Bool}, ::PeriodicBoundary)
     end
     return reshape([find!(labels, x) for x in 1:N], size(grid))
 end
-export findClusters2D
+export findClusters
 
 # Helper methods. Not exported
 # Set the target of the root of one cluster to the root of the other
@@ -131,16 +132,67 @@ function find!(labels, x)
     return y
 end
 
+# Multi-dimensional versions of the cluster finding algorithm. 
+# Slightly slower than the previous due to the use of union! if there is only one neighbour. Might be improves, but not significantly
+# Keep both with dispatch on Matrix vs Array
+function findClusters(grid::Array{Bool}, ::NormalBoundary)
+    N = prod(size(grid))
+    labels = collect(1:N)
+    linearIndices = LinearIndices(grid)
+    cartesianIndices = CartesianIndices(grid)
+
+    for idx in cartesianIndices
+        lidx = linearIndices[idx]
+        grid[idx] || continue # If unoccupied, continue to next
+
+        for d in 1:ndims(grid)
+            idx[d] == firstindex(grid, d) && continue # Currently at the first index along d
+            I = Base.setindex(zero(idx), 1, d) # Cartesian index that is all zero, except 1 along d
+            if grid[idx - I]
+                union!(labels, lidx, linearIndices[idx-I])
+            end
+        end
+    end
+    return reshape([find!(labels, x) for x in 1:N], size(grid))
+end
+function findClusters(grid::Array{Bool}, ::PeriodicBoundary)
+    N = prod(size(grid))
+    labels = collect(1:N)
+    linearIndices = LinearIndices(grid)
+    cartesianIndices = CartesianIndices(grid)
+
+    for idx in cartesianIndices
+        lidx = linearIndices[idx]
+        grid[idx] || continue # If unoccupied, continue to next
+
+        for d in 1:ndims(grid)
+            # Same as normal boundary conditions
+            idx[d] == firstindex(grid, d) && continue # Currently at the first index along d
+            I = Base.setindex(zero(idx), 1, d) # Cartesian index that is all zero, except 1 along d
+            if grid[idx - I]
+                union!(labels, lidx, linearIndices[idx-I])
+            end
+            
+            #Periodic boundary condition
+            if idx[d] == lastindex(grid, d) && grid[Base.setindex(idx, firstindex(grid, d), d)]
+                # Last cell along the dimension and the next cell over is occupied
+                union!(labels, lidx, linearIndices[Base.setindex(idx, firstindex(grid, d), d)])
+            end
+        end
+    end
+    return reshape([find!(labels, x) for x in 1:N], size(grid))
+end
+
 # Works for any boundary conditions
-function countClusters2D(grid::Matrix{Bool}, bc::BoundaryCondition)
-    clusters = findClusters2D(grid, bc) .* grid
+function countClusters(grid::Array{Bool}, bc::BoundaryCondition)
+    clusters = findClusters(grid, bc) .* grid
     return length(Set(clusters)) - 1 #Remove 0, which corresponds to the points where the grid is unoccupied
 end
-export countClusters2D
+export countClusters
 
-function clusterSizes2D(grid::Matrix{Bool}, bc::BoundaryCondition)
-    clusters = findClusters2D(grid, bc) .* grid
+function clusterSizes(grid::Array{Bool}, bc::BoundaryCondition)
+    clusters = findClusters(grid, bc) .* grid
     sizes = [count(==(n), clusters) for n in unique(clusters[clusters .!= 0])]
     return sizes
 end
-export clusterSizes2D
+export clusterSizes
