@@ -9,7 +9,7 @@ function singlePercolation()
 
     itr = Int(1e3)
     
-    ρIs, ρRs, saveTimes, savedGrids = percolate(L, penningFrac, kion, k2br, γ, itr, 0.01, true)
+    ρIs, ρRs, saveTimes, savedGrids = smillaPercolation(L, 2, penningFrac, kion, k2br, γ, itr, 0.01, true)
 
     saveCounts = length(saveTimes)
  
@@ -26,6 +26,7 @@ function singlePercolation()
     phasePlot = plot(ρRs, ρIs, title = "Phase Space", xlabel = "Rydberg density (/site)", ylabel = "Ion density (/site)")
     display(phasePlot)
 
+    #=
     # Autocorrelations
     autoCorrIs = round.(Int, range(1, saveCounts, 10))
     print("Calculating autocorrelations at indices $autoCorrIs")
@@ -46,7 +47,7 @@ function singlePercolation()
     println("under name: ", name)
     fullpath = path * "/" * name * ".gif"
     gif(autoCorrAnim, fullpath, fps=1)
-
+    =#
 
 end
 export singlePercolation

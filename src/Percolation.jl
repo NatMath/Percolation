@@ -15,10 +15,11 @@ include("tools/plotTools.jl")
 include("tools/mathTools.jl")
 include("tools/statsTools.jl")
 
-include("SmillaPercolation2D.jl")
+include("steppedPercolation.jl")
 
 include("analytics/singlePercolation.jl")
 include("analytics/rateOrders.jl")
+include("analytics/edSmillaCompare.jl")
 
 
 end # module Percolation
