@@ -9,6 +9,7 @@ include("scripts/meanField.jl")
 include("scripts/SFIDistribution.jl")
 include("scripts/statsTest.jl")
 
+include("tools/boundaryConditions.jl")
 include("tools/gridTools.jl")
 include("tools/plotTools.jl")
 include("tools/mathTools.jl")
