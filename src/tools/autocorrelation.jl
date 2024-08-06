@@ -51,3 +51,22 @@ function spatialCorrelationFFT(grid::Matrix)
     return distances[counts .!= 0], corrs[counts .!= 0]
 end
 export spatialCorrelationFFT
+
+function spatialCorrelationFFT(grid)
+    avg = mean(grid)
+    FT = fft(grid .- avg) #Real fft, optimized compared to the most generic fft
+    convolution = real.(ifft(FT .* conj.(FT)))
+
+    maxd2 = sum(size(grid) .^2 ) # maximum distance is the opposite corner
+    sums = zeros(maxd2+1)
+    counts = zeros(maxd2+1)
+
+    for idx in CartesianIndices(grid)
+        d2 = sum([idx[i]^2 for i in 1:ndims(grid)])
+        sums[d2] += convolution[idx]
+        counts[d2] += 1
+    end
+    corrs = sums ./ (counts .* prod(size(grid)))
+    distances = sqrt.(0:maxd2)
+    return distances[counts .!= 0], corrs[counts .!= 0]
+end
