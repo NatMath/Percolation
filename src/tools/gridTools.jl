@@ -19,35 +19,7 @@ export countNeighbours
 findNeighboured(grid, target, predicate = Returns(true)) = findall(x -> x>0, countNeighbours(grid, target, predicate))
 export findNeighboured
 
-function spatialCorrelation(grid::Matrix, cutoffDist = size(grid, 1) - 1)
-    offsets = [(x,y) for x in 0:cutoffDist, y in 0:cutoffDist if x^2+y^2 <= cutoffDist^2]
-    # Set of vectors which contain the behaviour as function of d. Indexed by distance^2+1.
-    # For example, offset (3,4) gives index 3^2+4^2+1 = 26. Offset (5,0) also gives index 26, because they are at the same distance
-    cummAB = zeros(cutoffDist^2 + 1)
-    cummA =  zeros(cutoffDist^2 + 1)
-    cummB =  zeros(cutoffDist^2 + 1)
-    counts = zeros(Int, cutoffDist^2 + 1)
-    buffer = similar(grid)
-    for (xoff, yoff) in offsets
-        A = @view grid[begin+xoff:end, begin+yoff:end]
-        B = @view grid[begin:end-xoff, begin:end-yoff]
-        bufferView = @view buffer[begin:end-xoff, begin:end-yoff]
-        # All the points of A,B are currently at a distance sqrt(d^2) from each other. 
-        ind = xoff^2 + yoff^2 + 1 #Index
-
-        bufferView .= A .* B
-        cummAB[ind] += sum(bufferView)
-        cummA[ind]  += sum(A)
-        cummB[ind]  += sum(B)
-        counts[ind] += prod(size(A))
-    end
-    autocorrs = @. cummAB/counts - cummA*cummB/counts^2
-    distances = sqrt.(0:cutoffDist^2)
-    return (distances[counts .!= 0], autocorrs[counts .!= 0])
-end
-export spatialCorrelation
-
-function findClusters(grid::Matrix{Bool}, ::NormalBoundary)
+function findClusters(grid::AbstractMatrix{Bool}, ::NormalBoundary)
     # Based on the naive Hoshen-Kopelman algorithm
     # https://www.ocf.berkeley.edu/~fricke/projects/hoshenkopelman/hoshenkopelman.html
 
@@ -77,7 +49,7 @@ function findClusters(grid::Matrix{Bool}, ::NormalBoundary)
     return reshape([find!(labels, x) for x in 1:N], size(grid))
 end
 
-function findClusters(grid::Matrix{Bool}, ::PeriodicBoundary)
+function findClusters(grid::AbstractMatrix{Bool}, ::PeriodicBoundary)
     L = size(grid, 1)
     N = prod(size(grid))
     labels = collect(1:N)
@@ -135,7 +107,7 @@ end
 # Multi-dimensional versions of the cluster finding algorithm. 
 # Slightly slower than the previous due to the use of union! if there is only one neighbour. Might be improves, but not significantly
 # Keep both with dispatch on Matrix vs Array
-function findClusters(grid::Array{Bool}, ::NormalBoundary)
+function findClusters(grid::AbstractArray{Bool}, ::NormalBoundary)
     N = prod(size(grid))
     labels = collect(1:N)
     linearIndices = LinearIndices(grid)
@@ -155,7 +127,7 @@ function findClusters(grid::Array{Bool}, ::NormalBoundary)
     end
     return reshape([find!(labels, x) for x in 1:N], size(grid))
 end
-function findClusters(grid::Array{Bool}, ::PeriodicBoundary)
+function findClusters(grid::AbstractArray{Bool}, ::PeriodicBoundary)
     N = prod(size(grid))
     labels = collect(1:N)
     linearIndices = LinearIndices(grid)
@@ -184,13 +156,13 @@ function findClusters(grid::Array{Bool}, ::PeriodicBoundary)
 end
 
 # Works for any boundary conditions
-function countClusters(grid::Array{Bool}, bc::BoundaryCondition)
+function countClusters(grid::AbstractArray{Bool}, bc::BoundaryCondition)
     clusters = findClusters(grid, bc) .* grid
     return length(Set(clusters)) - 1 #Remove 0, which corresponds to the points where the grid is unoccupied
 end
 export countClusters
 
-function clusterSizes(grid::Array{Bool}, bc::BoundaryCondition)
+function clusterSizes(grid::AbstractArray{Bool}, bc::BoundaryCondition)
     clusters = findClusters(grid, bc) .* grid
     sizes = [count(==(n), clusters) for n in unique(clusters[clusters .!= 0])]
     return sizes
